@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>StockPilot</title>
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;background:#f8fafc;-webkit-tap-highlight-color:transparent}
+#root{min-height:100vh}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script>
+(function(){
+"use strict";
+var e=React.createElement,useState=React.useState,useCallback=React.useCallback;
+
+// ── Config ──
+var API_URL='https://script.google.com/macros/s/YOUR_DEPLOY_ID/exec';
+
+// ── Mock Data ──
+var MOCK_ITEMS=[
+{id:"ITM-001",name:"アルミフレーム A3",category:"purchased",unit:"本",safetyStock:50,currentStock:42,warehouse:"第1倉庫",supplier:"山田金属",unitCost:1200},
+{id:"ITM-002",name:"制御基板 v2.1",category:"purchased",unit:"枚",safetyStock:30,currentStock:35,warehouse:"第1倉庫",supplier:"東京電子",unitCost:4500},
+{id:"ITM-003",name:"駆動モーター M5",category:"purchased",unit:"個",safetyStock:20,currentStock:8,warehouse:"第2倉庫",supplier:"日東モーター",unitCost:8900},
+{id:"ITM-004",name:"筐体カバー (白)",category:"produced",unit:"個",safetyStock:40,currentStock:65,warehouse:"第1倉庫",supplier:"自社生産",unitCost:600},
+{id:"ITM-005",name:"組立ユニット X1",category:"produced",unit:"台",safetyStock:15,currentStock:12,warehouse:"第2倉庫",supplier:"自社生産",unitCost:3200},
+{id:"ITM-006",name:"完成品 プロダクトα",category:"finished",unit:"台",safetyStock:10,currentStock:18,warehouse:"出荷倉庫",supplier:"—",unitCost:25000},
+{id:"ITM-007",name:"完成品 プロダクトβ",category:"finished",unit:"台",safetyStock:8,currentStock:5,warehouse:"出荷倉庫",supplier:"—",unitCost:38000},
+{id:"ITM-008",name:"ケーブルハーネス C3",category:"purchased",unit:"本",safetyStock:100,currentStock:145,warehouse:"第1倉庫",supplier:"配線工業",unitCost:350},
+{id:"ITM-009",name:"LED表示パネル",category:"produced",unit:"枚",safetyStock:25,currentStock:22,warehouse:"第1倉庫",supplier:"自社生産",unitCost:1800},
+{id:"ITM-010",name:"リース品 プロダクトγ",category:"finished",unit:"台",safetyStock:5,currentStock:7,warehouse:"リース倉庫",supplier:"—",unitCost:52000}
+];
+var MOCK_PROD=[
+{id:1,date:"2026-03-15",itemId:"ITM-004",itemName:"筐体カバー (白)",quantity:24,worker:"佐藤",line:"A",note:"",time:"09:15"},
+{id:2,date:"2026-03-15",itemId:"ITM-005",itemName:"組立ユニット X1",quantity:8,worker:"田中",line:"B",note:"午前分",time:"11:30"},
+{id:3,date:"2026-03-15",itemId:"ITM-009",itemName:"LED表示パネル",quantity:15,worker:"鈴木",line:"A",note:"",time:"14:00"},
+{id:4,date:"2026-03-14",itemId:"ITM-004",itemName:"筐体カバー (白)",quantity:30,worker:"佐藤",line:"A",note:"",time:"17:00"},
+{id:5,date:"2026-03-14",itemId:"ITM-005",itemName:"組立ユニット X1",quantity:10,worker:"田中",line:"B",note:"不良1個含む",time:"16:45"}
+];
+var MOCK_TX=[
+{id:1,date:"2026-03-15",type:"in",itemId:"ITM-001",itemName:"アルミフレーム A3",quantity:100,warehouse:"第1倉庫",note:"定期発注分",worker:"高橋"},
+{id:2,date:"2026-03-15",type:"out",itemId:"ITM-006",itemName:"完成品 プロダクトα",quantity:3,warehouse:"出荷倉庫",note:"A商事向け",worker:"渡辺"},
+{id:3,date:"2026-03-15",type:"move",itemId:"ITM-002",itemName:"制御基板 v2.1",quantity:10,warehouse:"第1→第2倉庫",note:"生産ライン補充",worker:"伊藤"},
+{id:4,date:"2026-03-14",type:"in",itemId:"ITM-003",itemName:"駆動モーター M5",quantity:20,warehouse:"第2倉庫",note:"緊急発注分",worker:"高橋"},
+{id:5,date:"2026-03-14",type:"out",itemId:"ITM-007",itemName:"完成品 プロダクトβ",quantity:2,warehouse:"出荷倉庫",note:"B建設向け",worker:"渡辺"}
+];
+
+var today="2026-03-15";
+var catL=function(c){return{purchased:"仕入",produced:"自社生産",finished:"完成品"}[c]||c};
+var catC=function(c){return{purchased:"#3b82f6",produced:"#f59e0b",finished:"#10b981"}[c]||"#6b7280"};
+var txL=function(t){return{in:"入庫",out:"出庫",move:"移動"}[t]||t};
+var txC=function(t){return{in:"#10b981",out:"#ef4444",move:"#8b5cf6"}[t]||"#6b7280"};
+
+// ── SVG Icons ──
+var Ico={
+  dash:e("svg",{width:20,height:20,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2},e("rect",{x:3,y:3,width:7,height:7,rx:1}),e("rect",{x:14,y:3,width:7,height:7,rx:1}),e("rect",{x:3,y:14,width:7,height:7,rx:1}),e("rect",{x:14,y:14,width:7,height:7,rx:1})),
+  prod:e("svg",{width:20,height:20,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2},e("path",{d:"M2 20h20"}),e("path",{d:"M5 20V8l5 4V8l5 4V4l5 4v12"})),
+  inv:e("svg",{width:20,height:20,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2},e("path",{d:"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"}),e("polyline",{points:"3.27 6.96 12 12.01 20.73 6.96"}),e("line",{x1:12,y1:22.08,x2:12,y2:12})),
+  list:e("svg",{width:20,height:20,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2},e("line",{x1:8,y1:6,x2:21,y2:6}),e("line",{x1:8,y1:12,x2:21,y2:12}),e("line",{x1:8,y1:18,x2:21,y2:18}),e("circle",{cx:3,cy:6,r:1,fill:"currentColor"}),e("circle",{cx:3,cy:12,r:1,fill:"currentColor"}),e("circle",{cx:3,cy:18,r:1,fill:"currentColor"})),
+  alert:e("svg",{width:20,height:20,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round"},e("path",{d:"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"}),e("line",{x1:12,y1:9,x2:12,y2:13}),e("line",{x1:12,y1:17,x2:12.01,y2:17})),
+  plus:e("svg",{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round"},e("line",{x1:12,y1:5,x2:12,y2:19}),e("line",{x1:5,y1:12,x2:19,y2:12})),
+  check:e("svg",{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},e("polyline",{points:"20 6 9 17 4 12"})),
+  x:e("svg",{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round"},e("line",{x1:18,y1:6,x2:6,y2:18}),e("line",{x1:6,y1:6,x2:18,y2:18})),
+  search:e("svg",{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round"},e("circle",{cx:11,cy:11,r:8}),e("line",{x1:21,y1:21,x2:16.65,y2:16.65}))
+};
+
+// ── Styles ──
+var S={
+  app:{maxWidth:480,margin:"0 auto",background:"#f8fafc",minHeight:"100vh",position:"relative",display:"flex",flexDirection:"column"},
+  hdr:{background:"linear-gradient(135deg,#0f172a,#1e293b)",padding:"14px 16px",position:"sticky",top:0,zIndex:100},
+  hdrIn:{display:"flex",justifyContent:"space-between",alignItems:"center"},
+  logo:{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#f97316,#fb923c)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff"},
+  hdrT:{color:"#fff",fontSize:16,fontWeight:700,letterSpacing:"0.5px"},
+  hdrS:{color:"#94a3b8",fontSize:10,letterSpacing:"1px"},
+  hdrD:{color:"#cbd5e1",fontSize:13,fontWeight:500},
+  abr:{background:"linear-gradient(90deg,#fef2f2,#fee2e2)",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,color:"#dc2626",borderBottom:"1px solid #fecaca"},
+  abtn:{background:"#dc2626",color:"#fff",border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"},
+  main:{flex:1,paddingBottom:70},
+  pg:{padding:"16px 16px 20px"},
+  pgT:{margin:"0 0 16px",fontSize:20,fontWeight:700,color:"#0f172a"},
+  cg:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20},
+  sc:{background:"#fff",borderRadius:12,padding:"14px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
+  cl:{fontSize:11,color:"#94a3b8",fontWeight:500,marginBottom:4},
+  cv:{fontSize:26,fontWeight:700,color:"#0f172a",lineHeight:1.1},
+  cu:{fontSize:12,fontWeight:400,color:"#94a3b8",marginLeft:2},
+  cs:{fontSize:11,color:"#64748b",marginTop:4},
+  sec:{marginBottom:20},
+  secT:{fontSize:14,fontWeight:600,color:"#475569",margin:"0 0 10px"},
+  cr:{display:"flex",gap:8},
+  cc:{flex:1,background:"#fff",borderRadius:10,padding:12,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},
+  cd:{width:8,height:8,borderRadius:"50%"},
+  mb:{height:4,background:"#e2e8f0",borderRadius:2,marginTop:8,overflow:"hidden"},
+  mbf:{height:"100%",borderRadius:2,transition:"width 0.3s"},
+  qb:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:14,borderRadius:12,background:"#fff7ed",color:"#f97316",border:"none",fontSize:14,fontWeight:600,cursor:"pointer"},
+  ar:{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f1f5f9"},
+  adot:{width:8,height:8,borderRadius:"50%",flexShrink:0},
+  ps:{background:"#fff",borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",textAlign:"center"},
+  pr:{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#fff",borderRadius:10,marginBottom:6,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},
+  pq:{fontSize:18,fontWeight:700,color:"#f97316",minWidth:50,textAlign:"right"},
+  fr:{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"},
+  fb:{padding:"6px 14px",borderRadius:20,border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",fontSize:12,fontWeight:500,cursor:"pointer"},
+  fba:{background:"#0f172a",color:"#fff",borderColor:"#0f172a"},
+  tr:{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#fff",borderRadius:10,marginBottom:6,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},
+  tb:{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600},
+  tyb:{flex:1,padding:10,borderRadius:8,border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",textAlign:"center"},
+  sb:{display:"flex",alignItems:"center",gap:8,background:"#fff",borderRadius:10,padding:"10px 14px",marginBottom:12,border:"1px solid #e2e8f0",color:"#94a3b8"},
+  si:{border:"none",outline:"none",flex:1,fontSize:14,color:"#0f172a",background:"transparent"},
+  ic:{background:"#fff",borderRadius:12,padding:14,marginBottom:8,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},
+  ct:{display:"inline-block",padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:600},
+  skb:{height:6,background:"#e2e8f0",borderRadius:3,overflow:"hidden"},
+  alc:{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",borderLeft:"4px solid #ef4444"},
+  mo:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+  md:{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"85vh",overflow:"auto"},
+  mh:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",borderBottom:"1px solid #f1f5f9"},
+  mc:{background:"#f1f5f9",border:"none",borderRadius:8,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#64748b"},
+  mbd:{padding:"16px 20px 32px"},
+  fg:{marginBottom:14},
+  fl:{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:6},
+  fi:{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:14,color:"#0f172a",outline:"none",boxSizing:"border-box",background:"#f8fafc"},
+  fs:{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:14,color:"#0f172a",outline:"none",boxSizing:"border-box",background:"#f8fafc",appearance:"auto"},
+  pb:{display:"flex",alignItems:"center",gap:6,padding:"10px 18px",borderRadius:10,background:"linear-gradient(135deg,#f97316,#fb923c)",color:"#fff",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",boxShadow:"0 2px 8px rgba(249,115,22,0.3)"},
+  nav:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,display:"flex",justifyContent:"space-around",background:"#fff",borderTop:"1px solid #e2e8f0",padding:"8px 0 12px",zIndex:100},
+  ni:{display:"flex",flexDirection:"column",alignItems:"center",background:"none",border:"none",cursor:"pointer",padding:"4px 8px"},
+  bdg:{position:"absolute",top:-4,right:-8,background:"#ef4444",color:"#fff",fontSize:9,fontWeight:700,borderRadius:10,padding:"1px 5px",minWidth:14,textAlign:"center"},
+  tst:{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",background:"#0f172a",color:"#fff",padding:"12px 20px",borderRadius:12,fontSize:13,fontWeight:500,zIndex:1001,boxShadow:"0 4px 20px rgba(0,0,0,0.2)"},
+  emp:{textAlign:"center",padding:24,color:"#94a3b8",fontSize:14,background:"#fff",borderRadius:12}
+};
+
+// ── Modal ──
+function Modal(p){
+  return e("div",{style:S.mo,onClick:p.onClose},
+    e("div",{style:S.md,onClick:function(ev){ev.stopPropagation()}},
+      e("div",{style:S.mh},
+        e("h3",{style:{margin:0,fontSize:16,fontWeight:600}},p.title),
+        e("button",{style:S.mc,onClick:p.onClose},Ico.x)),
+      e("div",{style:S.mbd},p.children)));
+}
+
+// ── Dashboard ──
+function DashPage(p){
+  var totalVal=p.items.reduce(function(s,i){return s+i.currentStock*i.unitCost},0);
+  return e("div",{style:S.pg},
+    e("h2",{style:S.pgT},"ダッシュボード"),
+    e("div",{style:S.cg},
+      e("div",{style:Object.assign({},S.sc,{borderLeft:"4px solid #f97316"})},
+        e("div",{style:S.cl},"本日の生産"),
+        e("div",{style:S.cv},p.prodTotal,e("span",{style:S.cu},"個")),
+        e("div",{style:S.cs},p.todayProd.length+"件の記録")),
+      e("div",{style:Object.assign({},S.sc,{borderLeft:"4px solid #3b82f6"})},
+        e("div",{style:S.cl},"総SKU数"),
+        e("div",{style:S.cv},p.items.length,e("span",{style:S.cu},"品目")),
+        e("div",{style:S.cs},"¥"+(totalVal/10000).toFixed(0)+"万 在庫総額")),
+      e("div",{style:Object.assign({},S.sc,{borderLeft:"4px solid #10b981"})},
+        e("div",{style:S.cl},"本日の入出庫"),
+        e("div",{style:S.cv},p.todayTx.length,e("span",{style:S.cu},"件")),
+        e("div",{style:S.cs},"入"+p.todayTx.filter(function(t){return t.type==="in"}).length+" / 出"+p.todayTx.filter(function(t){return t.type==="out"}).length)),
+      e("div",{style:Object.assign({},S.sc,{borderLeft:"4px solid "+(p.alertCt>0?"#ef4444":"#10b981"),cursor:"pointer"}),onClick:function(){p.onNav("alerts")}},
+        e("div",{style:S.cl},"在庫アラート"),
+        e("div",{style:Object.assign({},S.cv,{color:p.alertCt>0?"#ef4444":"#10b981"})},p.alertCt,e("span",{style:S.cu},"件")),
+        e("div",{style:S.cs},p.alertCt>0?"要対応":"問題なし"))),
+    // Category
+    e("div",{style:S.sec},
+      e("h3",{style:S.secT},"カテゴリ別在庫"),
+      e("div",{style:S.cr},["purchased","produced","finished"].map(function(cat){
+        var ci=p.items.filter(function(i){return i.category===cat});
+        var ok=ci.filter(function(i){return i.currentStock>=i.safetyStock}).length;
+        return e("div",{key:cat,style:S.cc},
+          e("div",{style:{display:"flex",alignItems:"center",gap:6,marginBottom:8}},
+            e("span",{style:Object.assign({},S.cd,{background:catC(cat)})}),
+            e("span",{style:{fontWeight:600,fontSize:13}},catL(cat))),
+          e("div",{style:{fontSize:22,fontWeight:700,color:"#0f172a"}},ci.length),
+          e("div",{style:{fontSize:11,color:"#64748b",marginTop:2}},"正常 "+ok+" / 不足 "+(ci.length-ok)),
+          e("div",{style:S.mb},e("div",{style:Object.assign({},S.mbf,{width:(ok/ci.length*100)+"%",background:catC(cat)})})));
+      }))),
+    // Quick actions
+    e("div",{style:S.sec},
+      e("h3",{style:S.secT},"クイックアクション"),
+      e("div",{style:{display:"flex",gap:10}},
+        e("button",{style:S.qb,onClick:function(){p.onNav("production")}},Ico.prod," ","生産記録"),
+        e("button",{style:Object.assign({},S.qb,{background:"#eff6ff",color:"#3b82f6"}),onClick:function(){p.onNav("inventory")}},Ico.inv," ","入出庫"))),
+    // Activity
+    e("div",{style:S.sec},
+      e("h3",{style:S.secT},"最近のアクティビティ"),
+      p.todayProd.concat(p.todayTx).slice(0,5).map(function(a,i){
+        var isProd=!!a.line;
+        return e("div",{key:i,style:S.ar},
+          e("div",{style:Object.assign({},S.adot,{background:isProd?"#f97316":txC(a.type)})}),
+          e("div",{style:{flex:1}},
+            e("div",{style:{fontSize:13,fontWeight:500,color:"#0f172a"}},isProd?"生産: "+a.itemName:txL(a.type)+": "+a.itemName),
+            e("div",{style:{fontSize:11,color:"#94a3b8"}},isProd?a.worker+" / "+a.line+"ライン":a.worker+" / "+a.warehouse)),
+          e("div",{style:{fontWeight:600,fontSize:14,color:"#0f172a"}},isProd?"+"+a.quantity:a.type==="out"?"-"+a.quantity:""+a.quantity),
+          e("div",{style:{fontSize:11,color:"#94a3b8",width:40,textAlign:"right"}},a.time||""));
+      })));
+}
+
+// ── Production ──
+function ProdPage(p){
+  var st=useState(""),fI=st[0],sfI=st[1];
+  var st2=useState(""),fQ=st2[0],sfQ=st2[1];
+  var st3=useState(""),fW=st3[0],sfW=st3[1];
+  var st4=useState("A"),fL=st4[0],sfL=st4[1];
+  var st5=useState(""),fN=st5[0],sfN=st5[1];
+  var tl=p.log.filter(function(l){return l.date===today});
+  var pl=p.log.filter(function(l){return l.date!==today});
+  function submit(){
+    if(!fI||!fQ||!fW)return;
+    var it=p.items.find(function(i){return i.id===fI});
+    p.onAdd({itemId:fI,itemName:it?it.name:"",quantity:parseInt(fQ),worker:fW,line:fL,note:fN,time:new Date().toTimeString().slice(0,5)});
+    sfI("");sfQ("");sfN("");p.setModal(null);
+  }
+  return e("div",{style:S.pg},
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      e("h2",{style:S.pgT},"生産記録"),
+      e("button",{style:S.pb,onClick:function(){p.setModal("prod")}},Ico.plus," 記録追加")),
+    e("div",{style:S.ps},
+      e("div",{style:{fontSize:12,color:"#94a3b8",marginBottom:4}},"本日の生産合計"),
+      e("div",{style:{fontSize:28,fontWeight:700,color:"#f97316"}},tl.reduce(function(s,l){return s+l.quantity},0),e("span",{style:{fontSize:14,fontWeight:400,color:"#94a3b8"}}," 個"))),
+    e("div",{style:S.sec},
+      e("h3",{style:S.secT},"本日 ("+today.slice(5).replace("-","/")+")"),
+      tl.length===0?e("div",{style:S.emp},"まだ記録がありません"):
+      tl.map(function(l){return e("div",{key:l.id,style:S.pr},
+        e("div",{style:{flex:1}},
+          e("div",{style:{fontSize:14,fontWeight:600}},l.itemName),
+          e("div",{style:{fontSize:11,color:"#94a3b8"}},l.worker+" / "+l.line+"ライン"+(l.note?" / "+l.note:""))),
+        e("div",{style:S.pq},"+"+l.quantity),
+        e("div",{style:{fontSize:11,color:"#94a3b8"}},l.time))})),
+    e("div",{style:S.sec},
+      e("h3",{style:S.secT},"過去の記録"),
+      pl.slice(0,5).map(function(l){return e("div",{key:l.id,style:Object.assign({},S.pr,{opacity:0.7})},
+        e("div",{style:{flex:1}},
+          e("div",{style:{fontSize:14,fontWeight:600}},l.itemName),
+          e("div",{style:{fontSize:11,color:"#94a3b8"}},l.date.slice(5).replace("-","/")+" / "+l.worker)),
+        e("div",{style:S.pq},"+"+l.quantity))})),
+    p.modal==="prod"&&e(Modal,{title:"生産記録の追加",onClose:function(){p.setModal(null)}},
+      e("div",{style:S.fg},e("label",{style:S.fl},"品目 *"),
+        e("select",{style:S.fs,value:fI,onChange:function(ev){sfI(ev.target.value)}},
+          e("option",{value:""},"選択してください"),
+          p.items.map(function(i){return e("option",{key:i.id,value:i.id},i.name)}))),
+      e("div",{style:{display:"flex",gap:10}},
+        e("div",{style:Object.assign({},S.fg,{flex:1})},e("label",{style:S.fl},"数量 *"),
+          e("input",{style:S.fi,type:"number",placeholder:"0",value:fQ,onChange:function(ev){sfQ(ev.target.value)}})),
+        e("div",{style:Object.assign({},S.fg,{flex:1})},e("label",{style:S.fl},"ライン"),
+          e("select",{style:S.fs,value:fL,onChange:function(ev){sfL(ev.target.value)}},
+            e("option",{value:"A"},"Aライン"),e("option",{value:"B"},"Bライン"),e("option",{value:"C"},"Cライン")))),
+      e("div",{style:S.fg},e("label",{style:S.fl},"作業者 *"),
+        e("input",{style:S.fi,placeholder:"名前",value:fW,onChange:function(ev){sfW(ev.target.value)}})),
+      e("div",{style:S.fg},e("label",{style:S.fl},"備考"),
+        e("input",{style:S.fi,placeholder:"不良数、特記事項など",value:fN,onChange:function(ev){sfN(ev.target.value)}})),
+      e("button",{style:Object.assign({},S.pb,{width:"100%",marginTop:12,justifyContent:"center",padding:"14px 0"}),onClick:submit},Ico.check," 記録する")));
+}
+
+// ── Inventory ──
+function InvPage(p){
+  var st=useState("in"),txT=st[0],stxT=st[1];
+  var st2=useState(""),fI=st2[0],sfI=st2[1];
+  var st3=useState(""),fQ=st3[0],sfQ=st3[1];
+  var st4=useState(""),fWh=st4[0],sfWh=st4[1];
+  var st5=useState(""),fN=st5[0],sfN=st5[1];
+  var st6=useState(""),fW=st6[0],sfW=st6[1];
+  var st7=useState("all"),fil=st7[0],sfil=st7[1];
+  var filtered=fil==="all"?p.tx:p.tx.filter(function(t){return t.type===fil});
+  function submit(){
+    if(!fI||!fQ||!fW)return;
+    var it=p.items.find(function(i){return i.id===fI});
+    p.onAdd({type:txT,itemId:fI,itemName:it?it.name:"",quantity:parseInt(fQ),warehouse:fWh||it&&it.warehouse||"",note:fN,worker:fW});
+    sfI("");sfQ("");sfN("");p.setModal(null);
+  }
+  return e("div",{style:S.pg},
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      e("h2",{style:S.pgT},"入出庫管理"),
+      e("button",{style:S.pb,onClick:function(){p.setModal("inv")}},Ico.plus," 新規記録")),
+    e("div",{style:S.fr},
+      [{k:"all",l:"すべて"},{k:"in",l:"入庫"},{k:"out",l:"出庫"},{k:"move",l:"移動"}].map(function(f){
+        return e("button",{key:f.k,style:Object.assign({},S.fb,fil===f.k?S.fba:{}),onClick:function(){sfil(f.k)}},f.l)})),
+    filtered.slice(0,10).map(function(tx){
+      return e("div",{key:tx.id,style:S.tr},
+        e("div",{style:Object.assign({},S.tb,{background:txC(tx.type)+"18",color:txC(tx.type)})},txL(tx.type)),
+        e("div",{style:{flex:1}},
+          e("div",{style:{fontSize:14,fontWeight:600}},tx.itemName),
+          e("div",{style:{fontSize:11,color:"#94a3b8"}},tx.date.slice(5).replace("-","/")+" / "+tx.warehouse+" / "+tx.worker),
+          tx.note&&e("div",{style:{fontSize:11,color:"#64748b",marginTop:2}},tx.note)),
+        e("div",{style:{fontWeight:700,fontSize:16,color:tx.type==="out"?"#ef4444":"#10b981"}},tx.type==="out"?"-":"+",tx.quantity))}),
+    p.modal==="inv"&&e(Modal,{title:"入出庫記録",onClose:function(){p.setModal(null)}},
+      e("div",{style:S.fg},e("label",{style:S.fl},"種別"),
+        e("div",{style:{display:"flex",gap:6}},["in","out","move"].map(function(t){
+          return e("button",{key:t,style:Object.assign({},S.tyb,txT===t?{background:txC(t),color:"#fff"}:{}),onClick:function(){stxT(t)}},txL(t))}))),
+      e("div",{style:S.fg},e("label",{style:S.fl},"品目 *"),
+        e("select",{style:S.fs,value:fI,onChange:function(ev){sfI(ev.target.value)}},
+          e("option",{value:""},"選択してください"),
+          p.items.map(function(i){return e("option",{key:i.id,value:i.id},i.name+" (現在庫: "+i.currentStock+")")}))),
+      e("div",{style:{display:"flex",gap:10}},
+        e("div",{style:Object.assign({},S.fg,{flex:1})},e("label",{style:S.fl},"数量 *"),
+          e("input",{style:S.fi,type:"number",placeholder:"0",value:fQ,onChange:function(ev){sfQ(ev.target.value)}})),
+        e("div",{style:Object.assign({},S.fg,{flex:1})},e("label",{style:S.fl},"倉庫"),
+          e("input",{style:S.fi,placeholder:"第1倉庫",value:fWh,onChange:function(ev){sfWh(ev.target.value)}}))),
+      e("div",{style:S.fg},e("label",{style:S.fl},"担当者 *"),
+        e("input",{style:S.fi,placeholder:"名前",value:fW,onChange:function(ev){sfW(ev.target.value)}})),
+      e("div",{style:S.fg},e("label",{style:S.fl},"備考"),
+        e("input",{style:S.fi,placeholder:"取引先、理由など",value:fN,onChange:function(ev){sfN(ev.target.value)}})),
+      e("button",{style:Object.assign({},S.pb,{width:"100%",marginTop:12,justifyContent:"center",padding:"14px 0"}),onClick:submit},Ico.check," 記録する")));
+}
+
+// ── Items Master ──
+function ItemsPage(p){
+  var st=useState(""),sch=st[0],ssch=st[1];
+  var st2=useState("all"),cf=st2[0],scf=st2[1];
+  var fl=p.items.filter(function(i){
+    return(i.name.indexOf(sch)>=0||i.id.indexOf(sch)>=0)&&(cf==="all"||i.category===cf)});
+  return e("div",{style:S.pg},
+    e("h2",{style:S.pgT},"品目マスタ"),
+    e("div",{style:S.sb},Ico.search,
+      e("input",{style:S.si,placeholder:"品名 or ID で検索...",value:sch,onChange:function(ev){ssch(ev.target.value)}})),
+    e("div",{style:S.fr},
+      [{k:"all",l:"すべて"},{k:"purchased",l:"仕入"},{k:"produced",l:"自社生産"},{k:"finished",l:"完成品"}].map(function(f){
+        return e("button",{key:f.k,style:Object.assign({},S.fb,cf===f.k?S.fba:{}),onClick:function(){scf(f.k)}},f.l)})),
+    e("div",{style:{fontSize:12,color:"#94a3b8",marginBottom:8}},fl.length+"件"),
+    fl.map(function(it){
+      var r=it.currentStock/it.safetyStock,low=r<1;
+      return e("div",{key:it.id,style:S.ic},
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},
+          e("div",null,
+            e("span",{style:Object.assign({},S.ct,{background:catC(it.category)+"18",color:catC(it.category)})},catL(it.category)),
+            e("div",{style:{fontSize:15,fontWeight:600,color:"#0f172a",marginTop:4}},it.name),
+            e("div",{style:{fontSize:11,color:"#94a3b8"}},it.id+" / "+it.warehouse)),
+          e("div",{style:{textAlign:"right"}},
+            e("div",{style:{fontSize:24,fontWeight:700,color:low?"#ef4444":"#0f172a"}},it.currentStock),
+            e("div",{style:{fontSize:11,color:"#94a3b8"}},it.unit))),
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+          e("div",{style:{fontSize:11,color:"#64748b"}},"安全在庫: "+it.safetyStock+" / "+it.supplier),
+          e("div",{style:Object.assign({},S.skb,{width:80})},
+            e("div",{style:{height:"100%",borderRadius:3,width:Math.min(r*100,100)+"%",background:r<0.5?"#ef4444":r<1?"#f59e0b":"#10b981",transition:"width 0.3s"}}))));
+    }));
+}
+
+// ── Alerts ──
+function AlertsPage(p){
+  return e("div",{style:S.pg},
+    e("h2",{style:S.pgT},"在庫アラート"),
+    p.items.length===0?
+      e("div",{style:Object.assign({},S.emp,{padding:40})},e("div",{style:{fontSize:36,marginBottom:8}},"✓"),"すべて正常です"):
+    p.items.sort(function(a,b){return a.currentStock/a.safetyStock-b.currentStock/b.safetyStock}).map(function(it){
+      var def=it.safetyStock-it.currentStock;
+      return e("div",{key:it.id,style:S.alc},
+        e("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+          e("div",{style:{color:"#ef4444",display:"flex"}},Ico.alert),
+          e("div",{style:{flex:1}},
+            e("div",{style:{fontSize:15,fontWeight:600,color:"#0f172a"}},it.name),
+            e("div",{style:{fontSize:11,color:"#94a3b8"}},it.id+" / "+it.warehouse))),
+        e("div",{style:{display:"flex",justifyContent:"space-between",background:"#fef2f2",borderRadius:8,padding:"10px 14px"}},
+          e("div",null,e("div",{style:{fontSize:11,color:"#94a3b8"}},"現在庫"),e("div",{style:{fontSize:20,fontWeight:700,color:"#ef4444"}},it.currentStock,e("span",{style:{fontSize:12,fontWeight:400}}," "+it.unit))),
+          e("div",null,e("div",{style:{fontSize:11,color:"#94a3b8"}},"安全在庫"),e("div",{style:{fontSize:20,fontWeight:700,color:"#64748b"}},it.safetyStock,e("span",{style:{fontSize:12,fontWeight:400}}," "+it.unit))),
+          e("div",null,e("div",{style:{fontSize:11,color:"#94a3b8"}},"不足数"),e("div",{style:{fontSize:20,fontWeight:700,color:"#ef4444"}},"-"+def,e("span",{style:{fontSize:12,fontWeight:400}}," "+it.unit)))));
+    }));
+}
+
+// ── Main App ──
+function App(){
+  var st=useState("dashboard"),pg=st[0],spg=st[1];
+  var st2=useState(MOCK_ITEMS),items=st2[0],sItems=st2[1];
+  var st3=useState(MOCK_PROD),prod=st3[0],sProd=st3[1];
+  var st4=useState(MOCK_TX),tx=st4[0],sTx=st4[1];
+  var st5=useState(null),modal=st5[0],sModal=st5[1];
+  var st6=useState(null),toast=st6[0],sToast=st6[1];
+
+  function showToast(m){sToast(m);setTimeout(function(){sToast(null)},2500)}
+
+  var alerts=items.filter(function(i){return i.currentStock<i.safetyStock});
+  var tProd=prod.filter(function(p){return p.date===today});
+  var tTx=tx.filter(function(t){return t.date===today});
+  var tProdT=tProd.reduce(function(s,p){return s+p.quantity},0);
+
+  var tabs=[
+    {k:"dashboard",ico:Ico.dash,l:"ホーム"},
+    {k:"production",ico:Ico.prod,l:"生産"},
+    {k:"inventory",ico:Ico.inv,l:"入出庫"},
+    {k:"items",ico:Ico.list,l:"品目"},
+    {k:"alerts",ico:Ico.alert,l:"アラート",bdg:alerts.length}
+  ];
+
+  return e("div",{style:S.app},
+    // Header
+    e("header",{style:S.hdr},
+      e("div",{style:S.hdrIn},
+        e("div",{style:{display:"flex",alignItems:"center",gap:10}},
+          e("div",{style:S.logo},"SP"),
+          e("div",null,
+            e("div",{style:S.hdrT},"StockPilot"),
+            e("div",{style:S.hdrS},"在庫管理 & 生産管理"))),
+        e("div",{style:S.hdrD},today.replace(/-/g,"/")))),
+    // Alert banner
+    alerts.length>0&&pg==="dashboard"&&e("div",{style:S.abr},
+      e("span",{style:{display:"flex",alignItems:"center",gap:6}},Ico.alert,e("strong",null,alerts.length+"件"),"の安全在庫割れ"),
+      e("button",{style:S.abtn,onClick:function(){spg("alerts")}},"確認 →")),
+    // Main
+    e("main",{style:S.main},
+      pg==="dashboard"&&e(DashPage,{items:items,todayProd:tProd,todayTx:tTx,prodTotal:tProdT,alertCt:alerts.length,onNav:spg}),
+      pg==="production"&&e(ProdPage,{items:items.filter(function(i){return i.category==="produced"}),log:prod,modal:modal,setModal:sModal,onAdd:function(entry){
+        sProd(function(prev){return[Object.assign({},entry,{id:prev.length+1,date:today})].concat(prev)});
+        sItems(function(prev){return prev.map(function(it){return it.id===entry.itemId?Object.assign({},it,{currentStock:it.currentStock+entry.quantity}):it})});
+        showToast(entry.itemName+" × "+entry.quantity+" を記録しました");
+      }}),
+      pg==="inventory"&&e(InvPage,{items:items,tx:tx,modal:modal,setModal:sModal,onAdd:function(t){
+        sTx(function(prev){return[Object.assign({},t,{id:prev.length+1,date:today})].concat(prev)});
+        sItems(function(prev){return prev.map(function(it){
+          if(it.id!==t.itemId)return it;
+          if(t.type==="in")return Object.assign({},it,{currentStock:it.currentStock+t.quantity});
+          if(t.type==="out")return Object.assign({},it,{currentStock:it.currentStock-t.quantity});
+          return it})});
+        showToast(txL(t.type)+": "+t.itemName+" × "+t.quantity);
+      }}),
+      pg==="items"&&e(ItemsPage,{items:items}),
+      pg==="alerts"&&e(AlertsPage,{items:alerts})),
+    // Toast
+    toast&&e("div",{style:S.tst},e("span",{style:{display:"flex",alignItems:"center",gap:6}},Ico.check," ",toast)),
+    // Nav
+    e("nav",{style:S.nav},tabs.map(function(t){
+      return e("button",{key:t.k,style:Object.assign({},S.ni,{color:pg===t.k?"#f97316":"#94a3b8"}),onClick:function(){spg(t.k)}},
+        e("div",{style:{position:"relative"}},t.ico,
+          t.bdg>0&&e("span",{style:S.bdg},t.bdg)),
+        e("span",{style:{fontSize:10,marginTop:2}},t.l))})));
+}
+
+// ── Render ──
+ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+})();
+</script>
+</body>
+</html>
