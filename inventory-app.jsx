@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+const { useState, useEffect, useCallback } = React;
+// ...
+window.StockPilotApp = function StockPilotApp() {
 
 // ═══════════════════════════════════════════════════════
 // StockPilot - 在庫管理 & 生産管理 PWA
