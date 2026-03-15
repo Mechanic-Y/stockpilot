@@ -1,0 +1,10 @@
+{
+  "name": "StockPilot",
+  "short_name": "StockPilot",
+  "description": "在庫管理 & 生産管理",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "orientation": "portrait"
+}
